@@ -16,19 +16,26 @@ fi
 
 # Automatically detect or interactively select a disk
 select_disk() {
-    echo "The following disks were detected:"
-    lsblk -d -o NAME,SIZE,TYPE | grep disk
+	echo "The following disks were detected:"
+	lsblk -d -o NAME,SIZE,TYPE | grep disk
 
-    # 自动选择第一个磁盘
-    DISK=$(lsblk -d -o NAME | grep -v NAME | head -n 1)
-    if [ -b "/dev/$DISK" ]; then
-        echo "Automatically selected disk: /dev/$DISK"
-    else
-        echo "No valid disk detected, please check your system."
-        exit 1
-    fi
+	# Check if /dev/sda exists (since it's your VM's disk)
+	DISK="/dev/sda"
+	if [ -b "$DISK" ]; then
+		echo "Automatically selected disk: $DISK"
+	else
+		# If no /dev/sda, prompt user to input the disk name
+		while true; do
+			read -rp "Please enter the target disk (e.g., /dev/sda): " DISK
+			if [ -b "$DISK" ]; then
+				echo "Selected disk: $DISK"
+				break
+			else
+				echo "Invalid disk, please try again."
+			fi
+		done
+	fi
 }
-
 
 select_disk
 EFI_PART="${DISK}1"
