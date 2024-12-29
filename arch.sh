@@ -1,31 +1,31 @@
 #!/bin/bash
 
-# 确保脚本以 root 身份运行
+# Ensure the script is run as root
 if [ "$EUID" -ne 0 ]; then
-	echo "请以 root 身份运行此脚本"
+	echo "Please run this script as root."
 	exit 1
 fi
 
-# 测试网络连通性
-echo "测试网络连通性..."
+# Test network connectivity
+echo "Testing network connectivity..."
 ping -c 3 www.archlinux.org &>/dev/null
 if [ $? -ne 0 ]; then
-	echo "网络连接失败，请检查网络后重新运行脚本。"
+	echo "Network connection failed, please check your network and rerun the script."
 	exit 1
 fi
 
-# 自动检测磁盘或交互式选择磁盘
+# Automatically detect or interactively select a disk
 select_disk() {
-	echo "检测到以下磁盘："
+	echo "The following disks were detected:"
 	lsblk -d -o NAME,SIZE,TYPE | grep disk
 
 	while true; do
-		read -rp "请输入目标磁盘 (如 /dev/sda): " DISK
+		read -rp "Please enter the target disk (e.g., /dev/sda): " DISK
 		if [ -b "$DISK" ]; then
-			echo "选择的磁盘是: $DISK"
+			echo "Selected disk: $DISK"
 			break
 		else
-			echo "无效的磁盘，请重新输入。"
+			echo "Invalid disk, please try again."
 		fi
 	done
 }
@@ -35,35 +35,35 @@ EFI_PART="${DISK}1"
 ROOT_PART="${DISK}2"
 SWAP_PART="${DISK}3"
 
-# 配置变量
+# Configuration variables
 HOSTNAME="archlinux"
 USERNAME="user"
-PASSWORD="password" # 修改为实际用户密码
+PASSWORD="password" # Change to actual user password
 TIMEZONE="Asia/Shanghai"
 LOCALE="en_US.UTF-8 UTF-8\nzh_CN.UTF-8 UTF-8"
 LANG="en_US.UTF-8"
 
-# 更新系统时间
-echo "同步系统时间..."
+# Synchronize system time
+echo "Synchronizing system time..."
 timedatectl set-ntp true
 
-# 分区磁盘
-echo "分区磁盘..."
+# Partition the disk
+echo "Partitioning the disk..."
 parted $DISK mklabel gpt
 parted $DISK mkpart primary fat32 1MiB 513MiB
 parted $DISK set 1 esp on
 parted $DISK mkpart primary linux-swap 513MiB 4GiB
 parted $DISK mkpart primary ext4 4GiB 100%
 
-# 格式化分区
-echo "格式化分区..."
+# Format partitions
+echo "Formatting partitions..."
 mkfs.fat -F32 $EFI_PART
 mkswap $SWAP_PART
 swapon $SWAP_PART
 mkfs.btrfs $ROOT_PART
 
-# 挂载分区
-echo "挂载分区..."
+# Mount partitions
+echo "Mounting partitions..."
 mount $ROOT_PART /mnt
 btrfs subvolume create /mnt/@
 btrfs subvolume create /mnt/@home
@@ -74,59 +74,59 @@ mount -o subvol=@home,compress=zstd $ROOT_PART /mnt/home
 mkdir -p /mnt/boot
 mount $EFI_PART /mnt/boot
 
-# 安装基本系统
-echo "安装基本系统..."
+# Install basic system
+echo "Installing base system..."
 pacstrap /mnt base base-devel linux linux-firmware btrfs-progs
 
-# 生成 fstab 文件
-echo "生成 fstab 文件..."
+# Generate fstab file
+echo "Generating fstab file..."
 genfstab -U /mnt >/mnt/etc/fstab
 
-# 切换到新系统
-echo "切换到新系统..."
+# Chroot into the new system
+echo "Chrooting into the new system..."
 arch-chroot /mnt /bin/bash <<EOF
 
-# 设置时区
-echo "设置时区..."
+# Set timezone
+echo "Setting timezone..."
 ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
 hwclock --systohc
 
-# 设置 Locale
-echo "设置 Locale..."
+# Set Locale
+echo "Setting Locale..."
 echo -e "$LOCALE" > /etc/locale.gen
 locale-gen
 echo "LANG=$LANG" > /etc/locale.conf
 
-# 设置主机名
-echo "设置主机名..."
+# Set hostname
+echo "Setting hostname..."
 echo "$HOSTNAME" > /etc/hostname
 echo -e "127.0.0.1\tlocalhost\n::1\tlocalhost\n127.0.1.1\t$HOSTNAME.localdomain\t$HOSTNAME" > /etc/hosts
 
-# 设置 root 密码
-echo "设置 root 密码..."
+# Set root password
+echo "Setting root password..."
 echo "root:$PASSWORD" | chpasswd
 
-# 创建普通用户
-echo "创建用户..."
+# Create regular user
+echo "Creating user..."
 useradd -m -G wheel $USERNAME
 echo "$USERNAME:$PASSWORD" | chpasswd
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
-# 安装引导程序
-echo "安装引导程序..."
+# Install bootloader
+echo "Installing bootloader..."
 pacman -S --noconfirm grub efibootmgr os-prober intel-ucode amd-ucode
 
 grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=ARCH
 grub-mkconfig -o /boot/grub/grub.cfg
 
-# 启用必要服务
-echo "启用必要服务..."
+# Enable necessary services
+echo "Enabling necessary services..."
 systemctl enable NetworkManager
 EOF
 
-# 卸载分区
-echo "卸载分区..."
+# Unmount partitions
+echo "Unmounting partitions..."
 umount -R /mnt
 swapoff $SWAP_PART
 
-echo "安装完成，重启后进入系统。"
+echo "Installation complete, reboot to enter the system."
